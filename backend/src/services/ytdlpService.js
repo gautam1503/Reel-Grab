@@ -1,11 +1,19 @@
-import { execFile } from 'child_process';
+import { execFile, execSync } from 'child_process';
 import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 
+function getPythonCommand() {
+  try {
+    execSync('python3 --version', { stdio: 'ignore' });
+    return 'python3';
+  } catch {
+    return 'python';
+  }
+}
+
 /**
  * Executes yt-dlp to extract video metadata and direct video stream URL.
- * Uses `python -m yt_dlp` to ensure cross-platform execution.
  */
 export async function getReelMetadata(cleanUrl) {
   // Demo Mode fallback for restricted firewalled networks
@@ -31,19 +39,20 @@ export async function getReelMetadata(cleanUrl) {
     '--dump-json',
     '--no-warnings',
     '--no-playlist',
-    '--no-call-home'
+    '--no-call-home',
+    cleanUrl
   ];
 
   // Optional proxy support for networks with endpoint filtering/firewalls
   const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
   if (proxyUrl) {
-    args.push('--proxy', proxyUrl);
+    args.splice(args.length - 1, 0, '--proxy', proxyUrl);
   }
 
-  args.push(cleanUrl);
+  const pythonCmd = getPythonCommand();
 
   try {
-    const { stdout } = await execFileAsync('python', args, {
+    const { stdout } = await execFileAsync(pythonCmd, args, {
       maxBuffer: 10 * 1024 * 1024, // 10MB buffer
       timeout: 30000 // 30 seconds max timeout
     });

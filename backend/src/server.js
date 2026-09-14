@@ -52,9 +52,16 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Check yt-dlp on startup
-execFile('python', ['-m', 'yt_dlp', '--version'], (err, stdout) => {
+const checkCmd = process.platform === 'win32' ? 'python' : 'python3';
+execFile(checkCmd, ['-m', 'yt_dlp', '--version'], (err, stdout) => {
   if (err) {
-    console.warn('⚠️ WARNING: yt-dlp was not detected on python path! Ensure python and yt-dlp are installed.');
+    execFile('python', ['-m', 'yt_dlp', '--version'], (err2, stdout2) => {
+      if (err2) {
+        console.warn('⚠️ WARNING: yt-dlp was not detected on python path! Ensure python and yt-dlp are installed.');
+      } else {
+        console.log(`✅ yt-dlp detected (version ${stdout2.trim()})`);
+      }
+    });
   } else {
     console.log(`✅ yt-dlp detected (version ${stdout.trim()})`);
   }
