@@ -7,6 +7,8 @@ import Features from './components/Features';
 import Disclaimer from './components/Disclaimer';
 import { Sparkles, Film, CheckCircle2 } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+
 export default function App() {
   const [url, setUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -21,7 +23,7 @@ export default function App() {
     setVideoData(null);
 
     try {
-      const response = await axios.post('/api/info', { url: targetUrl });
+      const response = await axios.post(`${API_BASE}/api/info`, { url: targetUrl });
       if (response.data && response.data.success) {
         setVideoData(response.data.data);
       } else {
@@ -53,7 +55,7 @@ export default function App() {
     setError(null);
 
     try {
-      const response = await axios.post('/api/download', { url }, {
+      const response = await axios.post(`${API_BASE}/api/download`, { url }, {
         responseType: 'blob',
         timeout: 60000
       });
