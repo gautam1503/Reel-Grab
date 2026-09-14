@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .bg-gradient-instagram {
+    background: linear-gradient(135deg, #833ab4 0%, #fd1d1d 50%, #fcb045 100%);
+  }
+
+  .text-gradient-instagram {
+    background: linear-gradient(135deg, #c13584 0%, #e1306c 35%, #fd1d1d 70%, #f56040 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .text-gradient-glow {
+    background: linear-gradient(135deg, #f43f5e 0%, #a855f7 50%, #6366f1 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .glass-panel {
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .glass-card {
+    background: rgba(30, 41, 59, 0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+}
+
+/* Background animated gradient orb */
+.bg-radial-glow {
+  background: radial-gradient(circle at 50% 20%, rgba(225, 48, 108, 0.15) 0%, rgba(131, 58, 180, 0.1) 35%, rgba(15, 23, 42, 0) 70%);
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.08); }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 8s infinite ease-in-out;
+}
