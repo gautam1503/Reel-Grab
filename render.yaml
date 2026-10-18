@@ -8,6 +8,7 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      # Optional: path to a Netscape cookies file if YouTube/Instagram demand sign-in
-      # - key: YTDLP_COOKIES_FILE
-      #   value: /etc/secrets/cookies.txt
+      # YouTube blocks cloud servers without a signed-in session. Upload a Netscape-format
+      # cookies.txt as a Render "Secret File" named cookies.txt; it is mounted at this path.
+      - key: YTDLP_COOKIES_FILE
+        value: /etc/secrets/cookies.txt

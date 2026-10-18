@@ -1,5 +1,8 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 const execFileAsync = promisify(execFile);
 
@@ -76,7 +79,8 @@ export function buildCommonArgs(runtime) {
   const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
   if (proxyUrl) args.push('--proxy', proxyUrl);
 
-  if (process.env.YTDLP_COOKIES_FILE) args.push('--cookies', process.env.YTDLP_COOKIES_FILE);
+  const cookiesFile = getWritableCookiesFile();
+  if (cookiesFile) args.push('--cookies', cookiesFile);
 
   // Modern YouTube extraction needs a JS runtime; Node is already running us, so reuse it
   if (runtime.supportsJsRuntimes) args.push('--js-runtimes', `node:${process.execPath}`);
@@ -84,6 +88,28 @@ export function buildCommonArgs(runtime) {
   if (process.env.FFMPEG_PATH) args.push('--ffmpeg-location', process.env.FFMPEG_PATH);
 
   return args;
+}
+
+let writableCookiesFile;
+
+/**
+ * yt-dlp rewrites its cookies file after each run, but secret-file mounts (e.g. Render's
+ * /etc/secrets) are read-only, so work from a private copy in the temp directory.
+ */
+function getWritableCookiesFile() {
+  const source = process.env.YTDLP_COOKIES_FILE;
+  if (!source) return null;
+  if (writableCookiesFile === undefined) {
+    try {
+      writableCookiesFile = path.join(os.tmpdir(), 'reelgrab-cookies.txt');
+      fs.copyFileSync(source, writableCookiesFile);
+      console.log(`🍪 Using yt-dlp cookies from ${source}`);
+    } catch (err) {
+      console.warn(`⚠️ Could not read YTDLP_COOKIES_FILE (${source}): ${err.message}`);
+      writableCookiesFile = null;
+    }
+  }
+  return writableCookiesFile;
 }
 
 export function isDemoUrl(cleanUrl) {
