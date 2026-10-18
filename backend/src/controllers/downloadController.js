@@ -43,6 +43,10 @@ export async function startDownloadController(req, res) {
   const result = await resolveMetadata(req.body?.url, res);
   if (!result) return;
 
+  if (result.data.downloadDisabledReason) {
+    return res.status(503).json({ success: false, error: result.data.downloadDisabledReason });
+  }
+
   if (result.data.duration && result.data.duration > MAX_DURATION_SECONDS) {
     return res.status(413).json({
       success: false,

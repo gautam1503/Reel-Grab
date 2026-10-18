@@ -11,7 +11,7 @@ export default function VideoPreviewCard({ videoData, download, onDownload }) {
   const [playerFailed, setPlayerFailed] = useState(false);
   const [thumbFailed, setThumbFailed] = useState(false);
 
-  const { url, platform, title, uploader, durationFormatted, quality, width, height, hasPreview, hasThumbnail, embedUrl } = videoData;
+  const { url, platform, title, uploader, durationFormatted, quality, width, height, hasPreview, hasThumbnail, embedUrl, downloadDisabledReason } = videoData;
   const meta = PLATFORM[platform] || PLATFORM.instagram;
   const PlatformIcon = meta.icon;
 
@@ -92,7 +92,7 @@ export default function VideoPreviewCard({ videoData, download, onDownload }) {
                 {meta.label}
               </span>
               <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-medium">
-                MP4 · {quality}
+                MP4{downloadDisabledReason ? '' : ` · ${quality}`}
               </span>
               {durationFormatted && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-medium">
@@ -117,10 +117,15 @@ export default function VideoPreviewCard({ videoData, download, onDownload }) {
             </div>
 
             <div className="mt-auto">
+              {downloadDisabledReason && (
+                <p role="status" className="mb-3 p-3 rounded-xl border border-amber-500/30 bg-amber-950/30 text-xs text-amber-200 leading-relaxed">
+                  {downloadDisabledReason}
+                </p>
+              )}
               <button
                 onClick={onDownload}
-                disabled={isWorking}
-                className={`relative w-full overflow-hidden py-4 px-5 rounded-2xl font-bold text-base text-white shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-wait ${
+                disabled={isWorking || Boolean(downloadDisabledReason)}
+                className={`relative w-full overflow-hidden py-4 px-5 rounded-2xl font-bold text-base text-white shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-wait ${downloadDisabledReason ? 'opacity-50 !cursor-not-allowed' : ''} ${
                   isDone
                     ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/25'
                     : 'bg-gradient-to-r from-pink-600 to-purple-600 shadow-pink-600/25 hover:brightness-110 active:scale-[0.99]'

@@ -3,6 +3,7 @@ import { promisify } from 'util';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import axios from 'axios';
 
 const execFileAsync = promisify(execFile);
 
@@ -131,7 +132,13 @@ export function getVideoMetadata(cleanUrl, platform) {
   if (cached) return cached.promise;
 
   const promise = fetchMetadata(cleanUrl, platform).then((result) => {
-    if (!result.success) metadataCache.delete(cleanUrl);
+    if (!result.success) {
+      metadataCache.delete(cleanUrl);
+    } else if (result.data.downloadDisabledReason) {
+      // Blocks are often brief; retry the real extraction soon instead of caching the fallback
+      const entry = metadataCache.get(cleanUrl);
+      if (entry) entry.expires = Date.now() + 60 * 1000;
+    }
     return result;
   });
   metadataCache.set(cleanUrl, { expires: now + METADATA_TTL_MS, promise });
@@ -207,7 +214,49 @@ async function fetchMetadata(cleanUrl, platform) {
 
     return buildResult(info, cleanUrl, platform, playlistItem, runtime);
   } catch (error) {
-    return parseYtdlpError(error.stderr || error.message || '', platform);
+    const failure = parseYtdlpError(error.stderr || error.message || '', platform);
+    // When YouTube blocks the server (not the video), still let people watch it via the embed
+    if (platform === 'youtube' && failure.statusCode >= 429) {
+      const fallback = await getYoutubePreviewFallback(cleanUrl);
+      if (fallback) return fallback;
+    }
+    return failure;
+  }
+}
+
+/**
+ * Preview-only metadata from YouTube's public oEmbed endpoint, which is not bot-gated.
+ * Returns null when oEmbed can't find the video (private, deleted), so the real error is shown.
+ */
+async function getYoutubePreviewFallback(cleanUrl) {
+  try {
+    const { data: embed } = await axios.get('https://www.youtube.com/oembed', {
+      params: { url: cleanUrl, format: 'json' },
+      timeout: 10000
+    });
+    const id = new URL(cleanUrl).searchParams.get('v');
+    return {
+      success: true,
+      data: {
+        id,
+        url: cleanUrl,
+        platform: 'youtube',
+        title: embed.title || 'YouTube video',
+        uploader: embed.author_name || 'YouTube',
+        duration: null,
+        durationFormatted: null,
+        width: embed.width || null,
+        height: embed.height || null,
+        quality: 'HD',
+        hasPreview: false,
+        hasThumbnail: Boolean(embed.thumbnail_url),
+        embedUrl: `https://www.youtube-nocookie.com/embed/${id}?rel=0`,
+        downloadDisabledReason: 'YouTube is blocking downloads from this server right now. You can still watch the video here — please try downloading again later.'
+      },
+      source: { direct: false, preview: null, thumbnailUrl: embed.thumbnail_url || null, playlistItem: null }
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -320,6 +369,15 @@ export function parseYtdlpError(stderr, platform) {
 
   if (errStr.includes('confirm your age') || errStr.includes('age-restricted') || errStr.includes('inappropriate for some users')) {
     return { success: false, statusCode: 403, error: 'This video is age-restricted and cannot be downloaded without signing in.' };
+  }
+
+  if (errStr.includes('page needs to be reloaded')) {
+    console.error('[YTDLP HINT] YouTube rejected the cookies session. Export fresh cookies (incognito, do not sign out) or use a residential proxy.');
+    return {
+      success: false,
+      statusCode: 429,
+      error: 'YouTube is temporarily blocking requests from this server. Please try again in a few minutes.'
+    };
   }
 
   if (errStr.includes('not a bot') || errStr.includes('sign in to confirm')) {
