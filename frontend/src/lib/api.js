@@ -22,25 +22,37 @@ export function mediaUrl(path, sourceUrl) {
   return `${API_BASE}${path}?url=${encodeURIComponent(sourceUrl)}`;
 }
 
+/** Always returns a string — hosts like Vercel answer unknown routes with `{ error: { code, message } }`. */
 export function errorMessage(err, fallback) {
-  if (err.response?.data?.error) return err.response.data.error;
-  if (err.code === 'ERR_NETWORK') return 'Cannot reach the ReelGrab server. Make sure the backend is running.';
+  const apiError = err.response?.data?.error;
+  if (typeof apiError === 'string' && apiError) return apiError;
+  if (err.code === 'ERR_NETWORK' || err.response?.status === 404 || err.response?.status === 405) {
+    return 'The ReelGrab server is not reachable right now. Please try again later.';
+  }
   return fallback;
+}
+
+// A 200 that isn't our JSON (e.g. a static host serving index.html) means the API isn't there
+function unwrap(body) {
+  if (!body || typeof body !== 'object' || !body.data) {
+    throw Object.assign(new Error('Unexpected server response'), { code: 'ERR_NETWORK' });
+  }
+  return body.data;
 }
 
 export async function fetchVideoInfo(url) {
   const { data } = await axios.post(`${API_BASE}/api/info`, { url }, { timeout: 90000 });
-  return data.data;
+  return unwrap(data);
 }
 
 export async function startDownloadJob(url) {
   const { data } = await axios.post(`${API_BASE}/api/download`, { url });
-  return data.data;
+  return unwrap(data);
 }
 
 export async function getDownloadJob(jobId) {
   const { data } = await axios.get(`${API_BASE}/api/download/${jobId}`);
-  return data.data;
+  return unwrap(data);
 }
 
 export function downloadFileUrl(jobId) {
