@@ -104,7 +104,7 @@ async function runYtdlpDownload(job, { data, source }) {
     : 'b[ext=mp4]/b/bv*[ext=mp4]/bv*';
 
   const args = [
-    ...buildCommonArgs(runtime),
+    ...buildCommonArgs(runtime, source.youtubeClient),
     '-f', format,
     '--newline',
     '--no-part',

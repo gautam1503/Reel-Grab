@@ -71,17 +71,39 @@ async function detectFfmpeg() {
   }
 }
 
+// YouTube gates cloud-server IPs differently per client app (web, TV, VR, mobile web), so when
+// one is blocked we try the next. "default" is yt-dlp's own choice and the only one using cookies.
+const YOUTUBE_CLIENTS = (process.env.YTDLP_YOUTUBE_CLIENTS || 'default,tv_simply,android_vr,mweb')
+  .split(',')
+  .map((client) => client.trim())
+  .filter(Boolean);
+let preferredYoutubeClient = null;
+const YOUTUBE_BLOCK_COOLDOWN_MS = 5 * 60 * 1000;
+let youtubeBlockedUntil = 0;
+
+function youtubeClientOrder() {
+  if (!preferredYoutubeClient) return YOUTUBE_CLIENTS;
+  return [preferredYoutubeClient, ...YOUTUBE_CLIENTS.filter((client) => client !== preferredYoutubeClient)];
+}
+
 /**
  * Arguments shared by every yt-dlp invocation (proxy, cookies, JS runtime for YouTube).
+ * `youtubeClient` pins a specific YouTube client; anything but "default" runs without cookies,
+ * since most non-web clients reject them.
  */
-export function buildCommonArgs(runtime) {
+export function buildCommonArgs(runtime, youtubeClient = null) {
   const args = [...runtime.baseArgs, '--ignore-config', '--no-warnings', '--no-playlist'];
 
   const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
   if (proxyUrl) args.push('--proxy', proxyUrl);
 
-  const cookiesFile = getWritableCookiesFile();
-  if (cookiesFile) args.push('--cookies', cookiesFile);
+  const pinnedClient = youtubeClient && youtubeClient !== 'default';
+  if (pinnedClient) {
+    args.push('--extractor-args', `youtube:player_client=${youtubeClient}`);
+  } else {
+    const cookiesFile = getWritableCookiesFile();
+    if (cookiesFile) args.push('--cookies', cookiesFile);
+  }
 
   // Modern YouTube extraction needs a JS runtime; Node is already running us, so reuse it
   if (runtime.supportsJsRuntimes) args.push('--js-runtimes', `node:${process.execPath}`);
@@ -181,8 +203,42 @@ async function fetchMetadata(cleanUrl, platform) {
     };
   }
 
+  // Every client was blocked moments ago; answer with the preview straight away instead of
+  // making each visitor wait through another full round of attempts
+  if (platform === 'youtube' && Date.now() < youtubeBlockedUntil) {
+    const fallback = await getYoutubePreviewFallback(cleanUrl);
+    if (fallback) return fallback;
+  }
+
+  let failure = null;
+  for (const client of platform === 'youtube' ? youtubeClientOrder() : [null]) {
+    const result = await extractMetadata(runtime, cleanUrl, platform, client);
+    if (result.success) {
+      if (client && client !== preferredYoutubeClient) {
+        console.log(`[YOUTUBE] Using player client "${client}"`);
+        preferredYoutubeClient = client;
+      }
+      return result;
+    }
+    failure = result;
+    // Only a server-level block is worth retrying with another client; private/deleted videos aren't
+    if (!(platform === 'youtube' && result.blocked)) break;
+    console.warn(`[YOUTUBE] Client "${client}" blocked, trying next`);
+  }
+
+  // When YouTube blocks the server (not the video), still let people watch it via the embed
+  if (platform === 'youtube' && failure.blocked) {
+    youtubeBlockedUntil = Date.now() + YOUTUBE_BLOCK_COOLDOWN_MS;
+    console.warn('[YOUTUBE] All player clients blocked; serving preview-only results for 5 minutes');
+    const fallback = await getYoutubePreviewFallback(cleanUrl);
+    if (fallback) return fallback;
+  }
+  return failure;
+}
+
+async function extractMetadata(runtime, cleanUrl, platform, client) {
   try {
-    const { stdout } = await execFileAsync(runtime.cmd, [...buildCommonArgs(runtime), '-J', cleanUrl], {
+    const { stdout } = await execFileAsync(runtime.cmd, [...buildCommonArgs(runtime, client), '-J', cleanUrl], {
       maxBuffer: 64 * 1024 * 1024,
       timeout: 60000,
       windowsHide: true
@@ -212,14 +268,15 @@ async function fetchMetadata(cleanUrl, platform) {
       return { success: false, statusCode: 404, error: 'No downloadable video was found at this link.' };
     }
 
-    return buildResult(info, cleanUrl, platform, playlistItem, runtime);
+    const result = buildResult(info, cleanUrl, platform, playlistItem, runtime);
+    result.source.youtubeClient = client;
+    return result;
   } catch (error) {
     const failure = parseYtdlpError(error.stderr || error.message || '', platform);
-    // When YouTube blocks the server (not the video), still let people watch it via the embed
-    if (platform === 'youtube' && failure.statusCode >= 429) {
-      const fallback = await getYoutubePreviewFallback(cleanUrl);
-      if (fallback) return fallback;
-    }
+    // 429+ (bot check, rejected session, network) means the server is blocked, not the video.
+    // A YouTube client returning no formats is also client-specific, so let the next one try.
+    const noFormats = /no video formats found|requested format is not available/i.test(error.stderr || '');
+    failure.blocked = failure.statusCode >= 429 || (platform === 'youtube' && noFormats);
     return failure;
   }
 }

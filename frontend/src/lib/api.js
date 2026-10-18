@@ -41,7 +41,7 @@ function unwrap(body) {
 }
 
 export async function fetchVideoInfo(url) {
-  const { data } = await axios.post(`${API_BASE}/api/info`, { url }, { timeout: 90000 });
+  const { data } = await axios.post(`${API_BASE}/api/info`, { url }, { timeout: 180000 });
   return unwrap(data);
 }
 
