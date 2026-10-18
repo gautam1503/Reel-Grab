@@ -1,4 +1,4 @@
-# 🎬 ReelGrab — High Performance Instagram Reel Downloader
+# 🎬 ReelGrab — Instagram & YouTube Video Downloader
 
 [![Node.js](https://img.shields.io/badge/Node.js-v20%2B-green?logo=node.js)](https://nodejs.org/)
 [![React](https://img.shields.io/badge/React-v18-blue?logo=react)](https://react.dev/)
@@ -6,7 +6,7 @@
 [![yt--dlp](https://img.shields.io/badge/Engine-yt--dlp-red)](https://github.com/yt-dlp/yt-dlp)
 [![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 
-**ReelGrab** is a full-stack, stateless web application designed to download public Instagram Reels and Posts directly in original high-definition MP4 video format. Built with **React**, **Tailwind CSS**, **Node.js (Express)**, and powered by **yt-dlp**, it offers a clean, ad-free experience with no registration, no user accounts, and zero server-side media storage.
+**ReelGrab** is a full-stack, stateless web application designed to download public Instagram Reels, Posts, YouTube videos and Shorts as MP4 — paste a link, preview the video on the page, then download it. Built with **React**, **Tailwind CSS**, **Node.js (Express)**, and powered by **yt-dlp**, it offers a clean, ad-free experience with no registration, no user accounts, and zero server-side media storage.
 
 ---
 
@@ -45,7 +45,8 @@
 - **Python**: 3.10+ (with `yt-dlp` installed)
 
 ```bash
-python -m pip install -U yt-dlp
+python -m pip install -U "yt-dlp[default]"
+# or on Windows: winget install yt-dlp.yt-dlp Gyan.FFmpeg
 ```
 
 ### Installation
@@ -92,6 +93,19 @@ python -m pip install -U yt-dlp
 
 ---
 
+## 🔌 API
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/api/info` `{ url }` | Video metadata for the preview card |
+| `GET` | `/api/stream?url=` | Proxied, seekable preview stream |
+| `GET` | `/api/thumbnail?url=` | Proxied thumbnail |
+| `POST` | `/api/download` `{ url }` | Starts a download job, returns `jobId` |
+| `GET` | `/api/download/:jobId` | Job progress (`downloading` → `processing` → `ready`) |
+| `GET` | `/api/download/:jobId/file` | The finished MP4 (kept ~15 minutes) |
+
+---
+
 ## 🐳 Docker Deployment
 
 Run the entire stack in a single container with Node.js, Python, `yt-dlp`, and `ffmpeg` pre-packaged:
@@ -121,7 +135,7 @@ ReelGrab/
 │   │   ├── services/
 │   │   │   └── ytdlpService.js         # yt-dlp secure execution & metadata parser
 │   │   ├── utils/
-│   │   │   └── urlValidator.js         # Instagram URL pattern validator & sanitizer
+│   │   │   └── urlValidator.js         # Instagram + YouTube URL validator & normalizer
 │   │   └── server.js                   # Main Express application entry point
 │   ├── .env.example
 │   └── package.json

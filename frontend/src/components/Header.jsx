@@ -1,5 +1,5 @@
 import React from 'react';
-import { Film, Sparkles, ShieldCheck } from 'lucide-react';
+import { Film, ShieldCheck } from 'lucide-react';
 
 export default function Header() {
   return (
@@ -18,10 +18,10 @@ export default function Header() {
                 ReelGrab
               </span>
               <span className="px-1.5 py-0.5 text-[10px] font-bold bg-pink-500/10 text-pink-400 border border-pink-500/20 rounded-md uppercase tracking-wider">
-                v1.0
+                v2
               </span>
             </div>
-            <span className="text-[11px] text-slate-400 font-medium">Fast Instagram Reel Downloader</span>
+            <span className="text-[11px] text-slate-400 font-medium">Instagram & YouTube video downloader</span>
           </div>
         </a>
 

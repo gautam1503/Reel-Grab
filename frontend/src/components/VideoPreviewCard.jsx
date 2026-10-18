@@ -1,132 +1,187 @@
 import React, { useState } from 'react';
-import { Download, Clock, User, Check, Copy, Film, ExternalLink, Play } from 'lucide-react';
+import { Download, Clock, User, CheckCircle2, Loader2, Instagram, Youtube, ExternalLink, ImageOff } from 'lucide-react';
+import { mediaUrl } from '../lib/api';
 
-export default function VideoPreviewCard({ videoData, onDownload, isDownloading }) {
-  const [copied, setCopied] = useState(false);
-  const [showPlayer, setShowPlayer] = useState(false);
+const PLATFORM = {
+  instagram: { label: 'Instagram', icon: Instagram, badge: 'bg-pink-500/10 text-pink-300 border-pink-500/25' },
+  youtube: { label: 'YouTube', icon: Youtube, badge: 'bg-red-500/10 text-red-300 border-red-500/25' }
+};
 
-  if (!videoData) return null;
+export default function VideoPreviewCard({ videoData, download, onDownload }) {
+  const [playerFailed, setPlayerFailed] = useState(false);
+  const [thumbFailed, setThumbFailed] = useState(false);
 
-  const { title, thumbnail, durationFormatted, uploader, streamUrl, id } = videoData;
+  const { url, platform, title, uploader, durationFormatted, quality, width, height, hasPreview, hasThumbnail, embedUrl } = videoData;
+  const meta = PLATFORM[platform] || PLATFORM.instagram;
+  const PlatformIcon = meta.icon;
 
-  const handleCopyLink = () => {
-    if (streamUrl) {
-      navigator.clipboard.writeText(streamUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
+  // Reels, Shorts and square posts sit beside the details; widescreen videos span the card
+  const isPortrait = width && height ? height >= width : platform === 'instagram';
+  const playerAspect = isPortrait && width && height ? { aspectRatio: `${width} / ${height}` } : undefined;
+  const thumbnailSrc = hasThumbnail && !thumbFailed ? mediaUrl('/api/thumbnail', url) : null;
+  const showEmbed = Boolean(embedUrl);
+  const showPlayer = !showEmbed && hasPreview && !playerFailed;
+
+  const isWorking = download.status === 'working';
+  const isDone = download.status === 'done';
 
   return (
-    <div className="w-full max-w-2xl mx-auto mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="glass-panel rounded-2xl p-5 border border-slate-700/60 shadow-2xl relative overflow-hidden">
-        {/* Glow accent */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-pink-500/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div className="w-full max-w-3xl mx-auto mt-8 animate-fade-up">
+      <div className="glass-panel rounded-3xl p-4 sm:p-5 shadow-2xl relative overflow-hidden">
+        <div className="absolute -top-24 -right-24 w-72 h-72 bg-pink-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-        <div className="flex flex-col md:flex-row gap-5 items-start">
-          {/* Thumbnail / Video Player */}
-          <div className="relative w-full md:w-48 aspect-[9/16] rounded-xl overflow-hidden bg-slate-900 border border-slate-800 shrink-0 group">
-            {showPlayer && streamUrl ? (
-              <video
-                src={streamUrl}
-                controls
-                autoPlay
-                className="w-full h-full object-cover"
+        <div className={`relative flex gap-5 ${isPortrait ? 'flex-col sm:flex-row' : 'flex-col'}`}>
+          {/* Player */}
+          <div
+            className={`relative rounded-2xl overflow-hidden bg-black border border-white/5 shrink-0 ${
+              isPortrait ? 'w-full max-w-[300px] mx-auto sm:mx-0 aspect-[9/16]' : 'w-full aspect-video'
+            }`}
+            style={playerAspect}
+          >
+            {showEmbed ? (
+              <iframe
+                src={embedUrl}
+                title={title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                referrerPolicy="strict-origin-when-cross-origin"
+                className="w-full h-full border-0"
               />
-            ) : (
+            ) : showPlayer ? (
+              <video
+                src={mediaUrl('/api/stream', url)}
+                poster={thumbnailSrc || undefined}
+                controls
+                playsInline
+                preload="metadata"
+                onError={() => setPlayerFailed(true)}
+                className="w-full h-full object-contain bg-black"
+              />
+            ) : thumbnailSrc ? (
               <>
                 <img
-                  src={thumbnail || 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=500&auto=format&fit=crop&q=60'}
+                  src={thumbnailSrc}
                   alt={title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  onError={(e) => {
-                    e.target.src = 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=500&auto=format&fit=crop&q=60';
-                  }}
+                  onError={() => setThumbFailed(true)}
+                  className="w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-slate-950/40 group-hover:bg-slate-950/20 transition-colors flex items-center justify-center">
-                  <button
-                    onClick={() => setShowPlayer(true)}
-                    className="w-12 h-12 rounded-full bg-pink-600/90 text-white flex items-center justify-center shadow-lg shadow-pink-600/40 hover:scale-110 transition-transform cursor-pointer"
-                    title="Preview Video"
-                  >
-                    <Play className="w-6 h-6 fill-current ml-0.5" />
-                  </button>
+                <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 to-transparent text-[11px] text-slate-300">
+                  Inline preview isn't available for this video — the download still works.
                 </div>
               </>
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-slate-500 text-xs">
+                <ImageOff className="w-8 h-8" />
+                <span>No preview available</span>
+              </div>
             )}
 
-            {durationFormatted && (
-              <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-slate-950/80 backdrop-blur-md text-[11px] font-bold text-slate-200 flex items-center gap-1">
-                <Clock className="w-3 h-3 text-pink-400" />
+            {durationFormatted && !showPlayer && !showEmbed && (
+              <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur text-[11px] font-bold text-slate-100 flex items-center gap-1">
+                <Clock className="w-3 h-3" />
                 <span>{durationFormatted}</span>
               </div>
             )}
           </div>
 
-          {/* Info & Actions */}
-          <div className="flex-1 flex flex-col justify-between h-full w-full py-1">
-            <div>
-              <div className="flex items-center gap-2 text-xs font-semibold text-pink-400 mb-1.5">
-                <User className="w-3.5 h-3.5" />
-                <span>@{uploader || 'instagram'}</span>
-              </div>
-
-              <h3 className="font-bold text-lg text-white leading-snug line-clamp-2 mb-2">
-                {title}
-              </h3>
-
-              {title.includes('Seqrite') || title.includes('Quick Heal') || title.includes('Blocked') ? (
-                <div className="mb-4 p-3 rounded-lg bg-amber-950/40 border border-amber-500/30 text-xs text-amber-200 leading-relaxed">
-                  <p className="font-bold text-amber-300 mb-1">Why am I seeing a placeholder video?</p>
-                  <p>
-                    Your computer’s antivirus (<strong>Seqrite Endpoint Protection / Quick Heal</strong>) is currently blocking connection attempts to <code>instagram.com</code>.
-                  </p>
-                  <p className="mt-1.5 font-medium text-amber-100">
-                    👉 To download the <strong>ACTUAL real video</strong> from your Instagram link, add <code>www.instagram.com</code> to Allowed Sites in Quick Heal / Seqrite settings, or connect to an unblocked mobile hotspot/Wi-Fi.
-                  </p>
-                </div>
-              ) : null}
-
-              <div className="flex flex-wrap items-center gap-2 mb-6">
-                <span className="px-2.5 py-1 rounded-md bg-slate-800 text-slate-300 text-xs font-medium border border-slate-700/50">
-                  Format: MP4 (Full HD)
+          {/* Details & actions */}
+          <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold ${meta.badge}`}>
+                <PlatformIcon className="w-3.5 h-3.5" />
+                {meta.label}
+              </span>
+              <span className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-medium">
+                MP4 · {quality}
+              </span>
+              {durationFormatted && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-medium">
+                  <Clock className="w-3 h-3" /> {durationFormatted}
                 </span>
-                <span className="px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 text-xs font-medium border border-emerald-500/20">
-                  Ready to save
-                </span>
-              </div>
+              )}
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-2.5">
+            <h2 className="font-bold text-lg sm:text-xl text-white leading-snug line-clamp-3 mb-2 break-words">{title}</h2>
+
+            <div className="flex items-center gap-1.5 text-sm text-slate-400 mb-6 min-w-0">
+              <User className="w-4 h-4 shrink-0" />
+              <span className="truncate">{platform === 'instagram' ? `@${uploader}` : uploader}</span>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-auto shrink-0 inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-200 transition-colors"
+              >
+                Open original <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            <div className="mt-auto">
               <button
                 onClick={onDownload}
-                disabled={isDownloading}
-                className="flex-1 py-3 px-4 rounded-xl bg-gradient-instagram text-white font-bold text-sm shadow-lg shadow-pink-500/25 hover:shadow-pink-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                disabled={isWorking}
+                className={`relative w-full overflow-hidden py-4 px-5 rounded-2xl font-bold text-base text-white shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-wait ${
+                  isDone
+                    ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/25'
+                    : 'bg-gradient-to-r from-pink-600 to-purple-600 shadow-pink-600/25 hover:brightness-110 active:scale-[0.99]'
+                }`}
               >
-                <Download className="w-4 h-4" />
-                <span>{isDownloading ? 'Saving File...' : 'Save Video File (.MP4)'}</span>
+                {isWorking && (
+                  <span
+                    className="absolute inset-y-0 left-0 bg-white/15 transition-[width] duration-500 ease-out"
+                    style={{ width: `${download.progress}%` }}
+                  ></span>
+                )}
+                <span className="relative flex items-center gap-2">
+                  {isWorking ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      {download.phase || 'Preparing'}… {download.progress > 0 ? `${download.progress}%` : ''}
+                    </>
+                  ) : isDone ? (
+                    <>
+                      <CheckCircle2 className="w-5 h-5" />
+                      Downloaded — save again
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-5 h-5" />
+                      Download MP4
+                    </>
+                  )}
+                </span>
               </button>
 
-              <button
-                onClick={handleCopyLink}
-                className="py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-sm border border-slate-700 transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                title="Copy Direct Video Link"
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-4 h-4 text-emerald-400" />
-                    <span className="text-emerald-400">Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4 text-slate-400" />
-                    <span>Copy Stream Link</span>
-                  </>
-                )}
-              </button>
+              <p className="mt-2.5 text-center text-xs text-slate-500">
+                {isWorking
+                  ? 'Keep this tab open — your download will start automatically.'
+                  : isDone
+                    ? 'Check your browser\'s downloads folder.'
+                    : 'Free · No watermark · No sign-up'}
+              </p>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function VideoPreviewSkeleton() {
+  return (
+    <div className="w-full max-w-3xl mx-auto mt-8" aria-label="Loading video" role="status">
+      <div className="glass-panel rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row gap-5 animate-pulse">
+        <div className="w-full max-w-[300px] mx-auto sm:mx-0 aspect-[9/16] rounded-2xl bg-slate-800/70"></div>
+        <div className="flex-1 flex flex-col gap-3 py-1">
+          <div className="flex gap-2">
+            <div className="h-6 w-24 rounded-full bg-slate-800/70"></div>
+            <div className="h-6 w-20 rounded-full bg-slate-800/70"></div>
+          </div>
+          <div className="h-6 w-full rounded bg-slate-800/70"></div>
+          <div className="h-6 w-2/3 rounded bg-slate-800/70"></div>
+          <div className="h-4 w-1/3 rounded bg-slate-800/50"></div>
+          <p className="mt-2 text-xs text-slate-500">Fetching video details… this can take a few seconds.</p>
+          <div className="mt-auto h-14 w-full rounded-2xl bg-slate-800/70"></div>
         </div>
       </div>
     </div>

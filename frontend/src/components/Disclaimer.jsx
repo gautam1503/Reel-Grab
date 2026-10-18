@@ -12,9 +12,9 @@ export default function Disclaimer() {
 
         <p className="text-xs text-slate-500 leading-relaxed max-w-2xl mx-auto">
           ReelGrab is an independent web utility designed to process publicly accessible media links. 
-          ReelGrab is not affiliated with, endorsed by, or associated with Instagram, Meta Platforms, Inc., 
-          or any of their subsidiaries. All Instagram™ trademarks, logos, and brand names are the property 
-          of their respective owners. We do not store, host, or cache downloaded media files on our servers.
+          ReelGrab is not affiliated with, endorsed by, or associated with Instagram, Meta Platforms, Inc., YouTube, Google LLC, 
+          or any of their subsidiaries. All Instagram™ and YouTube™ trademarks, logos, and brand names are the property 
+          of their respective owners. Temporary files are deleted automatically within minutes. Only download content you own or have permission to use.
         </p>
 
         <div className="mt-8 pt-6 border-t border-slate-900 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-4">

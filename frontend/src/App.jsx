@@ -1,152 +1,170 @@
-import React, { useState } from 'react';
-import axios from 'axios';
+import React, { useEffect, useRef, useState } from 'react';
 import Header from './components/Header';
 import DownloaderForm from './components/DownloaderForm';
-import VideoPreviewCard from './components/VideoPreviewCard';
+import VideoPreviewCard, { VideoPreviewSkeleton } from './components/VideoPreviewCard';
 import Features from './components/Features';
 import Disclaimer from './components/Disclaimer';
-import { Sparkles, Film, CheckCircle2 } from 'lucide-react';
+import {
+  fetchVideoInfo,
+  startDownloadJob,
+  getDownloadJob,
+  downloadFileUrl,
+  saveFile,
+  errorMessage
+} from './lib/api';
 
-const rawBase = import.meta.env.VITE_API_BASE_URL || '';
-const API_BASE = rawBase.endsWith('/') ? rawBase.slice(0, -1) : rawBase;
+const IDLE_DOWNLOAD = { status: 'idle', progress: 0, phase: '', jobId: null, filename: null };
 
 export default function App() {
   const [url, setUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
   const [videoData, setVideoData] = useState(null);
   const [error, setError] = useState(null);
+  const [download, setDownload] = useState(IDLE_DOWNLOAD);
 
-  // Fetch metadata for preview and setup download stream
+  // Incremented on every new lookup so late responses from older requests are ignored
+  const requestIdRef = useRef(0);
+  const pollTimerRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(pollTimerRef.current), []);
+
+  const resetDownload = () => {
+    clearTimeout(pollTimerRef.current);
+    setDownload(IDLE_DOWNLOAD);
+  };
+
   const handleSubmit = async (targetUrl) => {
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setError(null);
     setVideoData(null);
+    resetDownload();
 
     try {
-      const response = await axios.post(`${API_BASE}/api/info`, { url: targetUrl });
-      if (response.data && response.data.success) {
-        setVideoData(response.data.data);
-      } else {
-        setError(response.data.error || 'Failed to fetch Reel details.');
-      }
+      const data = await fetchVideoInfo(targetUrl);
+      if (requestId === requestIdRef.current) setVideoData(data);
     } catch (err) {
-      console.error('Fetch error:', err);
-      const serverMsg = err.response?.data?.error || err.message;
-      if (err.response?.status === 400) {
-        setError(serverMsg || 'Please enter a valid Instagram Reel or Post link.');
-      } else if (err.response?.status === 403) {
-        setError(serverMsg || 'This Instagram Reel is from a private account or unavailable.');
-      } else if (err.response?.status === 404) {
-        setError(serverMsg || 'Reel not found. It may have been deleted.');
-      } else if (err.response?.status === 429) {
-        setError(serverMsg || 'Instagram rate limits reached. Please try again in a minute.');
-      } else {
-        setError(serverMsg || 'Unable to connect to downloader server.');
+      if (requestId === requestIdRef.current) {
+        setError(errorMessage(err, 'Could not fetch this video. Please check the link and try again.'));
       }
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) setIsLoading(false);
     }
   };
 
-  // Trigger raw binary file download from /api/download with automatic fallback
-  const handleDownloadFile = async () => {
-    if (!url && !videoData?.streamUrl) return;
-    setIsDownloading(true);
+  const handleReset = () => {
+    requestIdRef.current += 1;
+    setUrl('');
+    setVideoData(null);
     setError(null);
+    setIsLoading(false);
+    resetDownload();
+  };
+
+  const pollJob = (jobId, requestId) => {
+    pollTimerRef.current = setTimeout(async () => {
+      if (requestId !== requestIdRef.current) return;
+      try {
+        const job = await getDownloadJob(jobId);
+        if (requestId !== requestIdRef.current) return;
+
+        if (job.status === 'ready') {
+          const href = downloadFileUrl(jobId);
+          setDownload({ status: 'done', progress: 100, phase: 'Saved to your device', jobId, filename: job.filename });
+          saveFile(href, job.filename);
+        } else if (job.status === 'error') {
+          setDownload(IDLE_DOWNLOAD);
+          setError(job.error || 'Download failed. Please try again.');
+        } else {
+          setDownload((prev) => ({ ...prev, status: 'working', progress: job.progress, phase: job.phase }));
+          pollJob(jobId, requestId);
+        }
+      } catch (err) {
+        if (requestId !== requestIdRef.current) return;
+        setDownload(IDLE_DOWNLOAD);
+        setError(errorMessage(err, 'Lost track of the download. Please try again.'));
+      }
+    }, 700);
+  };
+
+  const handleDownload = async () => {
+    if (!videoData) return;
+
+    // File is already prepared on the server; just save it again
+    if (download.status === 'done' && download.jobId) {
+      saveFile(downloadFileUrl(download.jobId), download.filename);
+      return;
+    }
+
+    const requestId = requestIdRef.current;
+    setError(null);
+    setDownload({ ...IDLE_DOWNLOAD, status: 'working', phase: 'Preparing download' });
 
     try {
-      const response = await axios.post(`${API_BASE}/api/download`, { url }, {
-        responseType: 'blob',
-        timeout: 60000
-      });
-
-      // Extract filename from header if available
-      const contentDisposition = response.headers['content-disposition'];
-      let filename = `reel-${videoData?.id || 'video'}.mp4`;
-      if (contentDisposition) {
-        const match = contentDisposition.match(/filename="?([^"]+)"?/);
-        if (match && match[1]) filename = match[1];
-      }
-
-      // Create download link blob
-      const blob = new Blob([response.data], { type: 'video/mp4' });
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(blobUrl);
+      const job = await startDownloadJob(videoData.url);
+      if (requestId !== requestIdRef.current) return;
+      setDownload((prev) => ({ ...prev, jobId: job.jobId, filename: job.filename }));
+      pollJob(job.jobId, requestId);
     } catch (err) {
-      console.warn('Backend proxy stream failed, attempting direct browser download fallback:', err);
-      if (videoData?.streamUrl) {
-        const filename = `reel-${videoData?.id || 'video'}.mp4`;
-        const link = document.createElement('a');
-        link.href = videoData.streamUrl;
-        link.setAttribute('download', filename);
-        link.setAttribute('target', '_blank');
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      } else {
-        setError('Failed to download video file stream. Please try again.');
-      }
-    } finally {
-      setIsDownloading(false);
+      if (requestId !== requestIdRef.current) return;
+      setDownload(IDLE_DOWNLOAD);
+      setError(errorMessage(err, 'Could not start the download. Please try again.'));
     }
   };
 
   return (
     <div className="min-h-screen flex flex-col relative bg-slate-950 text-slate-100 overflow-x-hidden">
-      {/* Background glowing gradients */}
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[500px] bg-radial-glow pointer-events-none z-0"></div>
-      <div className="fixed bottom-0 right-0 w-[500px] h-[500px] bg-purple-900/10 rounded-full blur-3xl pointer-events-none z-0"></div>
+      {/* Background glow */}
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-[1000px] max-w-[200vw] h-[520px] bg-radial-glow pointer-events-none z-0"></div>
+      <div className="fixed bottom-0 right-0 w-[420px] h-[420px] bg-red-900/10 rounded-full blur-3xl pointer-events-none z-0"></div>
 
-      {/* Navigation Header */}
       <Header />
 
-      {/* Main Content */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 pt-12 sm:pt-16 pb-12 relative z-10">
-        {/* Hero Section */}
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 pt-12 sm:pt-20 pb-12 relative z-10">
+        {/* Hero */}
         <div className="text-center max-w-3xl mx-auto mb-10">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-pink-500/10 via-purple-500/10 to-orange-500/10 border border-pink-500/20 text-pink-300 text-xs font-semibold mb-6 shadow-sm">
-            <Sparkles className="w-3.5 h-3.5 text-pink-400" />
-            <span>The #1 Instagram Reel & Video Downloader</span>
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/5 border border-white/10 text-slate-300 text-xs font-semibold mb-6">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>Instagram Reels · Posts · YouTube Videos · Shorts</span>
           </div>
 
-          <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight leading-[1.1] mb-5">
-            Download <span className="text-gradient-instagram">Instagram Reels</span> in HD
+          <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight leading-[1.08] mb-5">
+            Paste a link.
+            <br />
+            <span className="text-gradient-glow">Watch it. Save it.</span>
           </h1>
 
           <p className="text-slate-400 text-base sm:text-lg max-w-xl mx-auto leading-relaxed">
-            Paste any public Reel or video link below to download high-quality MP4 files directly to your device. Free, instant, and unlimited.
+            Drop any public Instagram or YouTube link below. We'll load the video right here so you can
+            preview it, then save it to your device as an MP4.
           </p>
         </div>
 
-        {/* Input Form */}
         <DownloaderForm
           onSubmit={handleSubmit}
+          onReset={handleReset}
           isLoading={isLoading}
+          hasResult={Boolean(videoData)}
           error={error}
           setError={setError}
           url={url}
           setUrl={setUrl}
         />
 
-        {/* Video Preview Result */}
-        <VideoPreviewCard
-          videoData={videoData}
-          onDownload={handleDownloadFile}
-          isDownloading={isDownloading}
-        />
+        {isLoading && <VideoPreviewSkeleton />}
 
-        {/* Features Grid */}
+        {videoData && (
+          <VideoPreviewCard
+            key={videoData.url}
+            videoData={videoData}
+            download={download}
+            onDownload={handleDownload}
+          />
+        )}
+
         <Features />
       </main>
 
-      {/* Footer */}
       <Disclaimer />
     </div>
   );
