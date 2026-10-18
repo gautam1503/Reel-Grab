@@ -120,6 +120,17 @@ docker run -d -p 5000:5000 --name reelgrab-app reelgrab
 
 Access the production build at **`http://localhost:5000`**.
 
+### Host from your own PC (free, YouTube works)
+
+YouTube blocks most cloud servers (Render, AWS, etc.), but not home connections. To share the app publicly from a Windows PC:
+
+```powershell
+winget install OpenJS.NodeJS.LTS yt-dlp.yt-dlp Gyan.FFmpeg Cloudflare.cloudflared
+powershell -ExecutionPolicy Bypass -File scripts\start-home.ps1
+```
+
+The script builds the site, starts the server, and opens a free Cloudflare quick tunnel. Share the `https://….trycloudflare.com` link it prints. The link changes on every start and works only while the PC and script are running; press Ctrl+C to stop.
+
 ### Deploy on Render (free)
 
 The container serves both the website and the API, so one service is all you need:
