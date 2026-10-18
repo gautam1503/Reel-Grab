@@ -1,0 +1,13 @@
+# One-click deploy: Render dashboard → New → Blueprint → pick this repo
+services:
+  - type: web
+    name: reelgrab
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Optional: path to a Netscape cookies file if YouTube/Instagram demand sign-in
+      # - key: YTDLP_COOKIES_FILE
+      #   value: /etc/secrets/cookies.txt

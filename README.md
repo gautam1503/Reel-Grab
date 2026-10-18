@@ -120,6 +120,16 @@ docker run -d -p 5000:5000 --name reelgrab-app reelgrab
 
 Access the production build at **`http://localhost:5000`**.
 
+### Deploy on Render (free)
+
+The container serves both the website and the API, so one service is all you need:
+
+1. Push this repo to GitHub.
+2. In Render: **New → Blueprint**, then pick the repo. `render.yaml` sets up a Docker web service with a `/health` check.
+3. Open the `*.onrender.com` URL once the build finishes.
+
+Free instances sleep when idle, so the first request after a while takes ~30–60 s. yt-dlp is refreshed on every boot to keep up with YouTube/Instagram changes.
+
 ---
 
 ## 📁 Project Structure
